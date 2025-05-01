@@ -26,38 +26,52 @@ jobs:
       run: |
         ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! command -v docker-compose &> /dev/null; then sudo curl -L \"https://github.com/docker/compose/releases/download/1.29.2/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose; fi"
 
-    - name: Create website directory
+    - name: Deploy code using a fresh clone approach
       run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p ~/website"
-
-    - name: Fix Git repository permissions
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if [ -d ~/website/.git ]; then sudo chown -R \$USER:\$USER ~/website/.git; fi"
-
-    - name: Setup Git repository
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && if [ ! -d .git ]; then git clone https://github.com/quantumhiveinc/website.git .; else git config --global --add safe.directory \$(pwd) && git pull origin main; fi"
-
-    - name: Fix permissions for entire website directory
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo chown -R \$USER:\$USER ~/website"
-
-    - name: Fix Docker permissions
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo chmod 666 /var/run/docker.sock && sudo usermod -aG docker \$USER"
-
-    - name: Setup required directories with proper permissions
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo mkdir -p ./letsencrypt && sudo chmod -R 755 ./letsencrypt && sudo touch ./letsencrypt/acme.json && sudo chmod 600 ./letsencrypt/acme.json && sudo mkdir -p ./frontend && sudo chmod -R 755 ./frontend && sudo mkdir -p ./traefik && sudo chmod -R 755 ./traefik"
-
-    - name: Copy frontend files
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo chown -R \$USER:\$USER ./frontend"
-
-    - name: Deploy with Docker Compose
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo docker-compose down && sudo docker-compose up -d --build"
-        
-    - name: Verify containers are running
-      run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo docker ps"
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          # Create a temporary directory for the fresh clone
+          TEMP_DIR=$(mktemp -d)
+          
+          # Clone the repository to the temporary directory
+          git clone https://github.com/quantumhiveinc/website.git $TEMP_DIR
+          
+          # Create website directory if it doesn't exist
+          mkdir -p ~/website
+          
+          # Ensure proper ownership of the website directory
+          sudo chown -R $USER:$USER ~/website
+          
+          # Copy files from temp directory to website directory
+          # Use rsync to preserve permissions and only update changed files
+          rsync -av --delete $TEMP_DIR/ ~/website/
+          
+          # Clean up the temporary directory
+          rm -rf $TEMP_DIR
+          
+          # Ensure all files have proper permissions
+          sudo chown -R $USER:$USER ~/website
+          
+          # Fix Docker permissions
+          sudo chmod 666 /var/run/docker.sock
+          sudo usermod -aG docker $USER
+          
+          # Setup required directories with proper permissions
+          cd ~/website
+          sudo mkdir -p ./letsencrypt
+          sudo chmod -R 755 ./letsencrypt
+          sudo touch ./letsencrypt/acme.json
+          sudo chmod 600 ./letsencrypt/acme.json
+          
+          # Ensure frontend and traefik directories have proper permissions
+          sudo mkdir -p ./frontend ./traefik
+          sudo chmod -R 755 ./frontend ./traefik
+          sudo chown -R $USER:$USER ./frontend ./traefik
+          
+          # Deploy with Docker Compose
+          cd ~/website
+          sudo docker-compose down
+          sudo docker-compose up -d --build
+          
+          # Verify containers are running
+          sudo docker ps
+        EOF
