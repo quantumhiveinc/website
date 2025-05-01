@@ -18,37 +18,38 @@ jobs:
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Deploy via SSH
+    - name: Install Docker on EC2
       run: |
-        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-          # Install Docker if not present
-          if ! command -v docker &> /dev/null
-          then
-              sudo apt-get update
-              sudo apt-get install -y docker.io
-              sudo systemctl enable docker
-              sudo systemctl start docker
-          fi
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! command -v docker &> /dev/null; then sudo apt-get update && sudo apt-get install -y docker.io && sudo systemctl enable docker && sudo systemctl start docker; fi"
 
-          # Install Docker Compose if not present
-          if ! command -v docker-compose &> /dev/null
-          then
-              sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-          fi
+    - name: Install Docker Compose on EC2
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if ! command -v docker-compose &> /dev/null; then sudo curl -L \"https://github.com/docker/compose/releases/download/1.29.2/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose && sudo chmod +x /usr/local/bin/docker-compose; fi"
 
-          # Navigate into the repository directory
-          cd ~/website
+    - name: Create website directory
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p ~/website"
 
-          # Add repository to Git's safe directories (address dubious ownership)
-          git config --global --add safe.directory /home/${{ secrets.EC2_USER }}/website
+    - name: Setup Git repository
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && if [ ! -d .git ]; then git clone https://github.com/quantumhiveinc/website.git .; else git config --global --add safe.directory \$(pwd) && git pull origin main; fi"
 
-          # Add user to docker group and apply group membership (address permission denied)
-          sudo usermod -aG docker $USER
-          newgrp docker || true # Use || true to prevent workflow failure if newgrp fails
+    - name: Fix Docker permissions
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo chmod 666 /var/run/docker.sock && sudo usermod -aG docker \$USER"
 
-          # Run Git pull and Docker Compose
-          git pull origin main
-          docker-compose down
-          docker-compose up -d --build
-        EOF
+    - name: Setup required directories with proper permissions
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo mkdir -p ./letsencrypt && sudo chmod -R 755 ./letsencrypt && sudo touch ./letsencrypt/acme.json && sudo chmod 600 ./letsencrypt/acme.json && sudo mkdir -p ./frontend && sudo chmod -R 755 ./frontend && sudo mkdir -p ./traefik && sudo chmod -R 755 ./traefik"
+
+    - name: Copy frontend files
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo chown -R \$USER:\$USER ./frontend"
+
+    - name: Deploy with Docker Compose
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo docker-compose down && sudo docker-compose up -d --build"
+        
+    - name: Verify containers are running
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && sudo docker ps"
