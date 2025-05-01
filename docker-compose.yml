@@ -11,7 +11,7 @@ services:
       - "8080:8080"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml
-      - ./traefik/acme.json:/letsencrypt/acme.json
+      - ./letsencrypt/acme.json:/letsencrypt/acme.json
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - web
@@ -20,7 +20,7 @@ services:
     build: ./frontend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`www.quantumhive.us`, `quantumhive.us`)"
+      - "traefik.http.routers.frontend.rule=Host(`quantumhive.us`, `www.quantumhive.us`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
     networks:
