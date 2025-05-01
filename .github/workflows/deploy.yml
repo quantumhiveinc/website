@@ -30,9 +30,17 @@ jobs:
       run: |
         ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p ~/website"
 
+    - name: Fix Git repository permissions
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "if [ -d ~/website/.git ]; then sudo chown -R \$USER:\$USER ~/website/.git; fi"
+
     - name: Setup Git repository
       run: |
         ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd ~/website && if [ ! -d .git ]; then git clone https://github.com/quantumhiveinc/website.git .; else git config --global --add safe.directory \$(pwd) && git pull origin main; fi"
+
+    - name: Fix permissions for entire website directory
+      run: |
+        ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "sudo chown -R \$USER:\$USER ~/website"
 
     - name: Fix Docker permissions
       run: |
