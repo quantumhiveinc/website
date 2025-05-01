@@ -8,6 +8,7 @@ This file tracks the project's progress using a task list format.
 ## Completed Tasks
 
 *   Created core frontend marketing pages (Homepage, About Us, Services/Products, Contact Us).
+*   Initialized Tailwind CSS in the frontend directory.
 
 ## Current Tasks
 
