@@ -40,6 +40,13 @@ jobs:
           # Navigate into the repository directory
           cd ~/website
 
+          # Add repository to Git's safe directories (address dubious ownership)
+          git config --global --add safe.directory /home/${{ secrets.EC2_USER }}/website
+
+          # Add user to docker group and apply group membership (address permission denied)
+          sudo usermod -aG docker $USER
+          newgrp docker || true # Use || true to prevent workflow failure if newgrp fails
+
           # Run Git pull and Docker Compose
           git pull origin main
           docker-compose down
